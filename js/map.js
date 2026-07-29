@@ -7,73 +7,6 @@
  * copyrighted map images are used.
  * ============================================================ */
 
-// World (flat map) coordinate space
-const WORLD_W = 1000;
-const WORLD_H = 780;
-
-// Screen viewBox
-const MAP_W = 1500;
-const MAP_H = 1000;
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-// Isometric projection: 30° dimetric, slightly scaled down
-const ISO_SC = 0.9;
-const ISO_CX = ISO_SC * Math.cos(Math.PI / 6); // ~0.779
-const ISO_CY = ISO_SC * Math.sin(Math.PI / 6); // 0.45
-const ISO_OX = 640;
-const ISO_OY = 70;
-
-// world (x, y[, height above ground]) -> screen point
-function isoPoint(x, y, z) {
-  return {
-    x: (x - y) * ISO_CX + ISO_OX,
-    y: (x + y) * ISO_CY + ISO_OY - (z || 0),
-  };
-}
-
-// Deterministic pseudo-random, so the map looks the same every load
-function makeRng(seed) {
-  let s = seed >>> 0;
-  return function () {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
-
-function el(name, attrs, parent) {
-  const node = document.createElementNS(SVG_NS, name);
-  for (const k in attrs) node.setAttribute(k, attrs[k]);
-  if (parent) parent.appendChild(node);
-  return node;
-}
-
-// Groups that keep a constant on-screen size: they get scale(k) applied,
-// where k is the current zoom ratio (1 = whole map, smaller = zoomed in).
-const ZOOM_SCALED = [];
-
-// pre = map-unit offset (applied before scaling), post = screen-unit offset
-function setLabelZoom(k) {
-  for (let i = 0; i < ZOOM_SCALED.length; i++) {
-    const n = ZOOM_SCALED[i];
-    n.setAttribute("transform", `${n.dataset.pre || ""} scale(${k}) ${n.dataset.post || ""}`);
-  }
-}
-
-/* ---------- upright (billboard) scenery, depth-sorted ---------- */
-
-// items: { depth, el } — depth is world x+y (bigger = nearer the viewer)
-function makeScene() {
-  const items = [];
-  return {
-    add(wx, wy, node) { items.push({ depth: wx + wy, el: node }); return node; },
-    mount(parent) {
-      items.sort((a, b) => a.depth - b.depth);
-      items.forEach((it) => parent.appendChild(it.el));
-    },
-  };
-}
-
 function makePeak(wx, wy, size, lone) {
   const p = isoPoint(wx, wy);
   const h = size * 1.6;
@@ -143,19 +76,17 @@ function makeTower(wx, wy) {
 
 function blobPath(cx, cy, rx, ry, rng, wobble) {
   const n = 14;
-  let d = "";
   const pts = [];
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
     const w = 1 + (rng() - 0.5) * (wobble || 0.35);
     pts.push([cx + Math.cos(a) * rx * w, cy + Math.sin(a) * ry * w]);
   }
-  d = `M ${pts[0][0]} ${pts[0][1]}`;
+  let d = `M ${pts[0][0]} ${pts[0][1]}`;
   for (let i = 1; i <= n; i++) {
     const p = pts[i % n];
     const prev = pts[i - 1];
-    const mx = (prev[0] + p[0]) / 2, my = (prev[1] + p[1]) / 2;
-    d += ` Q ${prev[0]} ${prev[1]} ${mx} ${my}`;
+    d += ` Q ${prev[0]} ${prev[1]} ${(prev[0] + p[0]) / 2} ${(prev[1] + p[1]) / 2}`;
   }
   return d + " Z";
 }
@@ -171,19 +102,11 @@ function drawForest(ground, scene, cx, cy, rx, ry, rng, treeCount) {
   }
 }
 
-function drawMap(svg) {
-  const rng = makeRng(3019); // T.A. 3019
-  svg.setAttribute("viewBox", `0 0 ${MAP_W} ${MAP_H}`);
+/* ---------- ground plane ---------- */
 
-  // ---- defs: subtle hand-drawn wobble for the ground terrain ----
-  const defs = el("defs", {}, svg);
-  const filter = el("filter", { id: "rough", x: "-5%", y: "-5%", width: "110%", height: "110%" }, defs);
-  el("feTurbulence", { type: "fractalNoise", baseFrequency: "0.015", numOctaves: "2", seed: "7", result: "noise" }, filter);
-  el("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: "3" }, filter);
-
-  // ---- the table slab: extruded edges under the ground plane ----
+function drawSlab(svg) {
   const T = 26; // slab thickness
-  const A = isoPoint(0, 0), B = isoPoint(WORLD_W, 0), C = isoPoint(WORLD_W, WORLD_H), D = isoPoint(0, WORLD_H);
+  const B = isoPoint(WORLD_W, 0), C = isoPoint(WORLD_W, WORLD_H), D = isoPoint(0, WORLD_H);
   const slab = el("g", { id: "slab" }, svg);
   el("polygon", {
     points: `${D.x},${D.y} ${C.x},${C.y} ${C.x},${C.y + T} ${D.x},${D.y + T}`,
@@ -193,17 +116,9 @@ function drawMap(svg) {
     points: `${C.x},${C.y} ${B.x},${B.y} ${B.x},${B.y + T} ${C.x},${C.y + T}`,
     class: "slab-right",
   }, slab);
+}
 
-  // ---- ground plane: everything inside is in world coords ----
-  const ground = el("g", {
-    id: "ground",
-    transform: `matrix(${ISO_CX} ${ISO_CY} ${-ISO_CX} ${ISO_CY} ${ISO_OX} ${ISO_OY})`,
-    filter: "url(#rough)",
-  }, svg);
-
-  el("rect", { x: 0, y: 0, width: WORLD_W, height: WORLD_H, class: "parchment" }, ground);
-
-  // ---- the Great Sea (west and south coast) ----
+function drawWater(ground, rng) {
   const seaD =
     "M 0 0 L 118 0 " +
     "C 128 60 122 110 108 160 " +
@@ -229,23 +144,27 @@ function drawMap(svg) {
     const wy = 690 + rng() * 60;
     el("path", { d: `M ${wx} ${wy} q 6 -2.5 12 0 q 6 2.5 12 0`, class: "wave" }, ground);
   }
+}
 
-  // ---- rivers ----
+function drawRivers(ground) {
   const rivers = el("g", { id: "rivers" }, ground);
+  const river = (d, major) =>
+    el("path", { d, class: "river" + (major ? " river-major" : "") }, rivers);
   // Brandywine
-  el("path", { d: "M 212 210 C 226 250 240 280 238 315 C 236 355 218 400 196 440 C 180 470 160 495 140 515", class: "river" }, rivers);
+  river("M 212 210 C 226 250 240 280 238 315 C 236 355 218 400 196 440 C 180 470 160 495 140 515");
   // Hoarwell/Greyflood
-  el("path", { d: "M 415 285 C 400 330 372 370 340 400 C 300 440 250 480 205 505", class: "river" }, rivers);
+  river("M 415 285 C 400 330 372 370 340 400 C 300 440 250 480 205 505");
   // Anduin, the Great River
-  el("path", { d: "M 565 85 C 560 150 548 210 540 270 C 533 325 528 355 532 390 C 538 425 560 445 580 462 C 596 476 605 500 612 525 C 620 552 630 570 636 588 C 640 612 632 650 622 688", class: "river river-major" }, rivers);
+  river("M 565 85 C 560 150 548 210 540 270 C 533 325 528 355 532 390 C 538 425 560 445 580 462 C 596 476 605 500 612 525 C 620 552 630 570 636 588 C 640 612 632 650 622 688", true);
   // Forest River (to the Long Lake)
-  el("path", { d: "M 592 205 C 615 205 632 198 648 198", class: "river" }, rivers);
+  river("M 592 205 C 615 205 632 198 648 198");
   // River Running (from Erebor past Lake-town)
-  el("path", { d: "M 645 152 C 648 172 650 185 650 198 C 660 240 700 280 760 310", class: "river" }, rivers);
+  river("M 645 152 C 648 172 650 185 650 198 C 660 240 700 280 760 310");
   // Isen
-  el("path", { d: "M 438 468 C 400 480 350 492 300 496 C 265 498 235 505 210 512", class: "river" }, rivers);
+  river("M 438 468 C 400 480 350 492 300 496 C 265 498 235 505 210 512");
+}
 
-  // ---- region labels: painted on the ground plane ----
+function drawRegionNames(ground) {
   const regions = el("g", { id: "regions" }, ground);
   const region = (x, y, text, size, angle) => {
     const t = el("text", { x, y, class: "region-label", style: `font-size:${size}px`, "text-anchor": "middle" }, regions);
@@ -262,8 +181,11 @@ function drawMap(svg) {
   region(120, 610, "The Great Sea", 9, -62);
   region(583, 262, "Mirkwood", 12, 78);
   region(468, 250, "Misty Mts.", 9, 80);
+}
 
-  // ---- upright scenery: forests' trees, mountains, towers ----
+/* ---------- upright scenery ---------- */
+
+function drawScenery(svg, ground, rng) {
   const scene = makeScene();
 
   // forest floors go on the ground; trees stand up in the scene
@@ -314,8 +236,11 @@ function drawMap(svg) {
   }
 
   scene.mount(el("g", { id: "scenery" }, svg));
+}
 
-  // ---- location markers & labels (billboarded, crisp) ----
+/* ---------- locations & screen-space decor ---------- */
+
+function drawLocations(svg) {
   const locs = el("g", { id: "locations" }, svg);
   for (const id in LOCATIONS) {
     const L = LOCATIONS[id];
@@ -341,8 +266,9 @@ function drawMap(svg) {
     const t = el("title", {}, g);
     t.textContent = L.name;
   }
+}
 
-  // ---- title cartouche & compass (screen space) ----
+function drawDecor(svg) {
   const deco = el("g", { id: "deco" }, svg);
   el("rect", { x: 1180, y: 34, width: 290, height: 66, class: "cartouche" }, deco);
   el("rect", { x: 1186, y: 40, width: 278, height: 54, class: "cartouche-inner" }, deco);
@@ -358,6 +284,41 @@ function drawMap(svg) {
   el("path", { d: "M -24 0 L 0 5 L 24 0 L 0 -5 Z", class: "compass-e", transform: "rotate(30)" }, cg);
   const nt = el("text", { x: 13, y: -30, class: "compass-label", "text-anchor": "middle" }, cg);
   nt.textContent = "N";
+}
+
+/* ---------- entry point ---------- */
+
+function drawMap(svg) {
+  const rng = makeRng(3019); // T.A. 3019
+  svg.setAttribute("viewBox", `0 0 ${MAP_W} ${MAP_H}`);
+
+  drawSlab(svg);
+
+  // clip the ground so baked wobble can't spill past the slab edges
+  const defs = el("defs", {}, svg);
+  const clip = el("clipPath", { id: "ground-clip" }, defs);
+  el("rect", { x: 0, y: 0, width: WORLD_W, height: WORLD_H }, clip);
+
+  // ground plane: everything inside is in world coords
+  const ground = el("g", {
+    id: "ground",
+    transform: `matrix(${ISO_CX} ${ISO_CY} ${-ISO_CX} ${ISO_CY} ${ISO_OX} ${ISO_OY})`,
+    "clip-path": "url(#ground-clip)",
+  }, svg);
+
+  el("rect", { x: 0, y: 0, width: WORLD_W, height: WORLD_H, class: "parchment" }, ground);
+  drawWater(ground, rng);
+  drawRivers(ground);
+  drawRegionNames(ground);
+  drawScenery(svg, ground, rng);
+
+  // bake the hand-drawn wobble into coastline and river geometry
+  // (once, at build time — no runtime filter, so zooming stays smooth)
+  ground.querySelectorAll(".sea").forEach((p) => roughenPath(p, 3, 7));
+  ground.querySelectorAll(".river").forEach((p) => roughenPath(p, 2, 9));
+
+  drawLocations(svg);
+  drawDecor(svg);
 
   // marker layer goes on top of everything
   el("g", { id: "markers" }, svg);

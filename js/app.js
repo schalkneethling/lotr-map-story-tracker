@@ -198,7 +198,7 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ book: bookSel.value, chapter: chapterSel.value }));
 
     // re-apply zoom scaling so new ring offsets take effect immediately
-    setLabelZoom(currentZoomK());
+    setLabelZoom(currentZoomK(), true);
 
     // cinematic scene: fly the camera to frame this chapter's action
     if (sceneToggle.checked && scenePoints.length) flyToScene(scenePoints);
