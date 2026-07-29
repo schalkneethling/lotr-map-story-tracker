@@ -90,26 +90,97 @@ function wobbleNoise(x, y) {
          Math.cos(y * 0.037 + Math.sin(x * 0.029) * 1.9);
 }
 
+// Smooth path through pts with quadratic midpoints. For closed paths pass
+// the points without a duplicated endpoint. hard[i] = true emits point i
+// exactly (a sharp vertex) instead of curving past it.
+function smoothPathD(pts, closed, hard) {
+  const n = pts.length;
+  const P = (p) => `${p[0]} ${p[1]}`;
+  let d = `M ${P(pts[0])}`;
+  const last = closed ? n : n - 1;
+  for (let i = 1; i <= last; i++) {
+    const p = pts[i % n], prev = pts[(i - 1) % n];
+    if (hard && hard[i % n]) d += ` Q ${P(prev)} ${P(p)}`;
+    else d += ` Q ${P(prev)} ${(prev[0] + p[0]) / 2} ${(prev[1] + p[1]) / 2}`;
+  }
+  if (closed) return d + " Z";
+  return hard && hard[n - 1] ? d : d + ` L ${P(pts[n - 1])}`;
+}
+
+// Locates the sharpest point of a corner that fell between samples:
+// ternary-search the arc span [lo, hi] for the point farthest from the
+// chord a→c (unimodal near a corner).
+function refineCorner(pathEl, lo, hi, a, c) {
+  let ux = c[0] - a[0], uy = c[1] - a[1];
+  const um = Math.hypot(ux, uy) || 1;
+  ux /= um; uy /= um;
+  const dist = (t) => {
+    const p = pathEl.getPointAtLength(t);
+    return Math.abs((p.x - a[0]) * uy - (p.y - a[1]) * ux);
+  };
+  for (let it = 0; it < 20; it++) {
+    const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+    if (dist(m1) < dist(m2)) lo = m1; else hi = m2;
+  }
+  const p = pathEl.getPointAtLength((lo + hi) / 2);
+  return [p.x, p.y];
+}
+
 // Re-samples a path and displaces its points with smooth noise, replacing
-// the "d" attribute. The element must be in the document (getTotalLength).
-function roughenPath(pathEl, amp, step) {
+// the "d" attribute. Three kinds of points are kept exactly in place so
+// the wobble cannot break the drawing's topology:
+//   - sharp corners (authored landmarks like the Gulf of Lune notch),
+//     recovered to their true position with refineCorner;
+//   - endpoints of open paths (river mouths that must stay fused to the
+//     coast, whose matching corner is likewise undisplaced);
+//   - points matching opts.pin (e.g. the map border, so the sea stays
+//     flush with the slab edge).
+function roughenPath(pathEl, amp, step, opts) {
+  opts = opts || {};
   const len = pathEl.getTotalLength();
   if (!len) return;
   const closed = /z\s*$/i.test(pathEl.getAttribute("d") || "");
   const n = Math.max(4, Math.round(len / step));
-  const pts = [];
+  const raw = [];
   for (let i = 0; i <= n; i++) {
     const p = pathEl.getPointAtLength((i / n) * len);
-    pts.push([
-      p.x + wobbleNoise(p.x, p.y) * amp,
-      p.y + wobbleNoise(p.x + 137, p.y + 91) * amp,
-    ]);
+    raw.push([p.x, p.y]);
   }
-  // smooth through displaced points with quadratic midpoints
-  let d = `M ${pts[0][0]} ${pts[0][1]}`;
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1], p = pts[i];
-    d += ` Q ${prev[0]} ${prev[1]} ${(prev[0] + p[0]) / 2} ${(prev[1] + p[1]) / 2}`;
+  if (closed) raw.pop(); // duplicate of raw[0]
+  const count = raw.length;
+  const seg = len / n;
+
+  // cosine of the direction change at sample i (1 = straight)
+  const bendAt = (i) => {
+    if (!closed && (i === 0 || i === count - 1)) return 1;
+    const a = raw[(i - 1 + count) % count], b = raw[i], c = raw[(i + 1) % count];
+    const d1x = b[0] - a[0], d1y = b[1] - a[1], d2x = c[0] - b[0], d2y = c[1] - b[1];
+    const m = Math.hypot(d1x, d1y) * Math.hypot(d2x, d2y);
+    return m ? (d1x * d2x + d1y * d2y) / m : 1;
+  };
+  const CORNER = 0.82; // ~35° per sample
+
+  const pts = [], hard = [];
+  const push = (p, h) => { pts.push(p); hard.push(h); };
+  let i = 0;
+  while (i < count) {
+    if (bendAt(i) < CORNER) {
+      // collapse the run of bent samples into one exact corner vertex
+      let j = i;
+      while (j + 1 < count && bendAt(j + 1) < CORNER) j++;
+      const a = raw[(i - 1 + count) % count], c = raw[(j + 1) % count];
+      push(refineCorner(pathEl, Math.max(0, (i - 1) * seg), Math.min(len, (j + 1) * seg), a, c), true);
+      i = j + 1;
+    } else {
+      const p = raw[i];
+      const pinned = (!closed && (i === 0 || i === count - 1)) ||
+        (opts.pin && opts.pin(p[0], p[1]));
+      push(pinned ? p : [
+        p[0] + wobbleNoise(p[0], p[1]) * amp,
+        p[1] + wobbleNoise(p[0] + 137, p[1] + 91) * amp,
+      ], !!pinned);
+      i++;
+    }
   }
-  pathEl.setAttribute("d", closed ? d + " Z" : d + ` L ${pts[pts.length - 1][0]} ${pts[pts.length - 1][1]}`);
+  pathEl.setAttribute("d", smoothPathD(pts, closed, hard));
 }

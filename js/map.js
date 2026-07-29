@@ -82,13 +82,7 @@ function blobPath(cx, cy, rx, ry, rng, wobble) {
     const w = 1 + (rng() - 0.5) * (wobble || 0.35);
     pts.push([cx + Math.cos(a) * rx * w, cy + Math.sin(a) * ry * w]);
   }
-  let d = `M ${pts[0][0]} ${pts[0][1]}`;
-  for (let i = 1; i <= n; i++) {
-    const p = pts[i % n];
-    const prev = pts[i - 1];
-    d += ` Q ${prev[0]} ${prev[1]} ${(prev[0] + p[0]) / 2} ${(prev[1] + p[1]) / 2}`;
-  }
-  return d + " Z";
+  return smoothPathD(pts, true);
 }
 
 function drawForest(ground, scene, cx, cy, rx, ry, rng, treeCount) {
@@ -118,6 +112,12 @@ function drawSlab(svg) {
   }, slab);
 }
 
+// points on the world border must not wobble, or the sea detaches from
+// the slab edge
+function onWorldBorder(x, y) {
+  return x < 0.75 || y < 0.75 || x > WORLD_W - 0.75 || y > WORLD_H - 0.75;
+}
+
 function drawWater(ground, rng) {
   const seaD =
     "M 0 0 L 118 0 " +
@@ -132,7 +132,8 @@ function drawWater(ground, rng) {
     "C 632 702 660 718 700 735 " +
     "C 760 758 900 768 1000 770 " +
     "L 1000 780 L 0 780 Z";
-  el("path", { d: seaD, class: "sea" }, ground);
+  const sea = el("path", { d: seaD, class: "sea" }, ground);
+  roughenPath(sea, 3, 7, { pin: onWorldBorder });
   // wave dashes
   for (let i = 0; i < 26; i++) {
     const wx = 15 + rng() * 90;
@@ -148,8 +149,11 @@ function drawWater(ground, rng) {
 
 function drawRivers(ground) {
   const rivers = el("g", { id: "rivers" }, ground);
-  const river = (d, major) =>
-    el("path", { d, class: "river" + (major ? " river-major" : "") }, rivers);
+  const river = (d, major) => {
+    const p = el("path", { d, class: "river" + (major ? " river-major" : "") }, rivers);
+    roughenPath(p, 2, 9); // open path: endpoints stay pinned to the coast
+    return p;
+  };
   // Brandywine
   river("M 212 210 C 226 250 240 280 238 315 C 236 355 218 400 196 440 C 180 470 160 495 140 515");
   // Hoarwell/Greyflood
@@ -311,12 +315,6 @@ function drawMap(svg) {
   drawRivers(ground);
   drawRegionNames(ground);
   drawScenery(svg, ground, rng);
-
-  // bake the hand-drawn wobble into coastline and river geometry
-  // (once, at build time — no runtime filter, so zooming stays smooth)
-  ground.querySelectorAll(".sea").forEach((p) => roughenPath(p, 3, 7));
-  ground.querySelectorAll(".river").forEach((p) => roughenPath(p, 2, 9));
-
   drawLocations(svg);
   drawDecor(svg);
 
