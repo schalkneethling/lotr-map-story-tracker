@@ -24,14 +24,11 @@
     const icon = typeof CHAR_ICONS !== "undefined" && CHAR_ICONS[id];
     if (!icon) return null;
     const size = radius * 1.55;
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("class", "marker-glyph" + (dark ? " marker-glyph-dark" : ""));
-    g.setAttribute("transform", `translate(${-size / 2} ${-size / 2}) scale(${size / 512})`);
-    icon.paths.forEach((d) => {
-      const p = document.createElementNS(SVG_NS, "path");
-      p.setAttribute("d", d);
-      g.appendChild(p);
+    const g = el("g", {
+      class: "marker-glyph" + (dark ? " marker-glyph-dark" : ""),
+      transform: `translate(${-size / 2} ${-size / 2}) scale(${size / 512})`,
     });
+    icon.paths.forEach((d) => el("path", { d: d }, g));
     return g;
   }
 
@@ -39,50 +36,32 @@
   const markers = {}; // charId -> { g, label }
   for (const id in CHARACTERS) {
     const c = CHARACTERS[id];
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("class", "marker hidden");
+    const g = el("g", { class: "marker hidden" }, markersLayer);
     g.dataset.char = id;
 
     // inner group keeps the token at constant on-screen size while zooming
-    const sc = document.createElementNS(SVG_NS, "g");
+    const sc = el("g", {}, g);
     ZOOM_SCALED.push(sc);
 
-    const halo = document.createElementNS(SVG_NS, "circle");
-    halo.setAttribute("r", "13");
-    halo.setAttribute("class", "marker-halo");
-    sc.appendChild(halo);
-
-    const circle = document.createElementNS(SVG_NS, "circle");
-    circle.setAttribute("r", "10");
-    circle.setAttribute("class", "marker-dot");
-    circle.setAttribute("fill", c.color);
-    sc.appendChild(circle);
+    el("circle", { r: 13, class: "marker-halo" }, sc);
+    el("circle", { r: 10, class: "marker-dot", fill: c.color }, sc);
 
     const glyph = glyphGroup(id, 10, c.dark);
     if (glyph) {
       sc.appendChild(glyph);
     } else {
-      const text = document.createElementNS(SVG_NS, "text");
-      text.setAttribute("class", "marker-init" + (c.dark ? " marker-init-dark" : ""));
-      text.setAttribute("y", "3.2");
-      text.setAttribute("text-anchor", "middle");
+      const text = el("text", {
+        class: "marker-init" + (c.dark ? " marker-init-dark" : ""),
+        y: 3.2,
+        "text-anchor": "middle",
+      }, sc);
       text.textContent = c.init;
-      sc.appendChild(text);
     }
 
-    const label = document.createElementNS(SVG_NS, "text");
-    label.setAttribute("class", "marker-name");
-    label.setAttribute("y", "22");
-    label.setAttribute("text-anchor", "middle");
+    const label = el("text", { class: "marker-name", y: 22, "text-anchor": "middle" }, sc);
     label.textContent = c.name;
-    sc.appendChild(label);
+    el("title", {}, sc).textContent = c.name;
 
-    const title = document.createElementNS(SVG_NS, "title");
-    title.textContent = c.name;
-    sc.appendChild(title);
-
-    g.appendChild(sc);
-    markersLayer.appendChild(g);
     markers[id] = { g: g, sc: sc, label: label };
   }
 
@@ -117,14 +96,8 @@
       const chip = document.createElement("span");
       chip.className = "chip";
       chip.dataset.char = id;
-      const mini = document.createElementNS(SVG_NS, "svg");
-      mini.setAttribute("viewBox", "-11 -11 22 22");
-      mini.setAttribute("class", "chip-token");
-      const dot = document.createElementNS(SVG_NS, "circle");
-      dot.setAttribute("r", "10");
-      dot.setAttribute("fill", c.color);
-      dot.setAttribute("class", "marker-dot");
-      mini.appendChild(dot);
+      const mini = el("svg", { viewBox: "-11 -11 22 22", class: "chip-token" });
+      el("circle", { r: 10, fill: c.color, class: "marker-dot" }, mini);
       const glyph = glyphGroup(id, 10, c.dark);
       if (glyph) mini.appendChild(glyph);
       chip.appendChild(mini);
@@ -198,7 +171,7 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ book: bookSel.value, chapter: chapterSel.value }));
 
     // re-apply zoom scaling so new ring offsets take effect immediately
-    setLabelZoom(currentZoomK());
+    setLabelZoom(currentZoomK(), true);
 
     // cinematic scene: fly the camera to frame this chapter's action
     if (sceneToggle.checked && scenePoints.length) flyToScene(scenePoints);
