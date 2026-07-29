@@ -1,0 +1,333 @@
+/* ============================================================
+ * style.css — parchment map styling
+ * ============================================================ */
+
+:root {
+  --ink: #3b2f1d;
+  --ink-soft: #6b5a3e;
+  --parchment: #f0e2c4;
+  --parchment-dark: #e2cfa5;
+  --sea: #b9cdc8;
+  --forest: #a9bb8a;
+  --forest-edge: #6d7f52;
+  --river: #7fa3ae;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #241c10;
+  font-family: "IM Fell English", Georgia, "Times New Roman", serif;
+  color: var(--ink);
+}
+
+#map-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #38290f 0%, #241c10 75%);
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+#map.grabbing { cursor: grabbing; }
+
+/* ---------- SVG terrain ---------- */
+.parchment { fill: var(--parchment); }
+
+.sea {
+  fill: var(--sea);
+  fill-opacity: 0.65;
+  stroke: #5f7d78;
+  stroke-width: 1.6;
+}
+.wave {
+  fill: none;
+  stroke: #5f7d78;
+  stroke-width: 0.8;
+  opacity: 0.5;
+}
+
+.river {
+  fill: none;
+  stroke: var(--river);
+  stroke-width: 1.8;
+  opacity: 0.9;
+}
+.river-major { stroke-width: 2.6; }
+
+.forest {
+  fill: var(--forest);
+  fill-opacity: 0.55;
+  stroke: var(--forest-edge);
+  stroke-width: 1;
+}
+.tree-trunk { stroke: #55663c; stroke-width: 0.8; }
+
+/* upright 2.5D scenery */
+.mtn-light {
+  fill: #e9d9b4;
+  stroke: var(--ink-soft);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+.mtn-dark {
+  fill: #c4ab7d;
+  stroke: var(--ink-soft);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+.peak-lone .mtn-light, .peak-lone .mtn-dark { stroke-width: 1.4; }
+.tree-cone { fill: #7a8f5c; stroke: #55663c; stroke-width: 0.6; stroke-linejoin: round; }
+
+.tower-left  { fill: #d9c69a; stroke: var(--ink-soft); stroke-width: 0.7; }
+.tower-right { fill: #b59c6e; stroke: var(--ink-soft); stroke-width: 0.7; }
+.tower-top   { fill: #efe0bd; stroke: var(--ink-soft); stroke-width: 0.7; }
+
+.slab-left  { fill: #8a713f; stroke: #3b2f1d; stroke-width: 1; }
+.slab-right { fill: #6b552c; stroke: #3b2f1d; stroke-width: 1; }
+.smoke {
+  fill: none;
+  stroke: #8a7a68;
+  stroke-width: 1.4;
+  opacity: 0.8;
+  stroke-linecap: round;
+}
+
+/* ---------- locations & labels ---------- */
+.loc-dot { fill: #5a4632; stroke: var(--parchment); stroke-width: 0.8; }
+.loc-label {
+  font-size: 9.5px;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--parchment);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+.loc-minor .loc-label {
+  font-size: 8px;
+  fill: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#map.zoomed .loc-minor .loc-label { opacity: 1; }
+.loc-major .loc-label { font-size: 11px; font-weight: bold; }
+
+.region-label {
+  font-family: "Cinzel", "IM Fell English", serif;
+  fill: var(--ink-soft);
+  opacity: 0.55;
+  letter-spacing: 3px;
+}
+
+.map-title {
+  font-family: "Cinzel", serif;
+  font-size: 19px;
+  font-weight: 700;
+  fill: var(--ink);
+  letter-spacing: 2px;
+}
+.map-subtitle {
+  font-size: 11px;
+  font-style: italic;
+  fill: var(--ink-soft);
+}
+.cartouche { fill: var(--parchment); stroke: var(--ink-soft); stroke-width: 1.6; }
+.cartouche-inner { fill: none; stroke: var(--ink-soft); stroke-width: 0.7; }
+
+.compass-ring { fill: none; stroke: var(--ink-soft); stroke-width: 1; opacity: 0.8; }
+.compass-n { fill: var(--ink-soft); }
+.compass-e { fill: none; stroke: var(--ink-soft); stroke-width: 0.8; }
+.compass-label { font-size: 11px; fill: var(--ink-soft); }
+
+/* ---------- scene toggle ---------- */
+#panel label.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.check input { accent-color: #5a2a1c; margin: 0; }
+
+/* ---------- character markers ---------- */
+.marker {
+  transition: transform 1.6s cubic-bezier(0.45, 0.05, 0.35, 1), opacity 0.6s ease;
+  cursor: pointer;
+}
+.marker.hidden { opacity: 0; pointer-events: none; }
+.marker.faded { opacity: 0.45; }
+.marker.faded .marker-dot { stroke-dasharray: 3 2.5; }
+.marker.highlight .marker-halo { fill: #fff8e0; opacity: 1; }
+.marker.highlight { opacity: 1; }
+
+.marker-halo { fill: #fff8e0; opacity: 0; transition: opacity 0.2s; }
+.marker-dot { stroke: var(--ink); stroke-width: 1.6; }
+.marker-init {
+  font-family: Georgia, serif;
+  font-size: 8.5px;
+  font-weight: bold;
+  fill: #f7f1de;
+  pointer-events: none;
+}
+.marker-init-dark { fill: var(--ink); }
+.marker-glyph path { fill: #f7f1de; }
+.marker-glyph-dark path { fill: var(--ink); }
+.marker-name {
+  font-size: 9px;
+  fill: var(--ink);
+  paint-order: stroke;
+  stroke: var(--parchment);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#map.zoomed .marker:not(.clustered) .marker-name { opacity: 1; }
+.marker.clustered .marker-name { display: none; }
+.marker:hover .marker-name,
+.marker.highlight .marker-name { display: block; opacity: 1; }
+
+/* ---------- control panel ---------- */
+#panel {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  width: 240px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  padding: 16px 18px;
+  background: linear-gradient(160deg, #f4e8cd 0%, #e9d7ae 100%);
+  border: 2px solid var(--ink);
+  outline: 1px solid var(--ink-soft);
+  outline-offset: -6px;
+  border-radius: 3px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+#panel h1 {
+  margin: 0 0 12px;
+  font-family: "Cinzel", serif;
+  font-size: 17px;
+  letter-spacing: 1px;
+  line-height: 1.25;
+  text-align: center;
+}
+#panel h1 span { font-size: 12px; font-weight: 500; color: var(--ink-soft); }
+
+#panel label {
+  display: block;
+  margin: 8px 0 3px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+#panel select {
+  width: 100%;
+  padding: 5px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: #faf2dd;
+  border: 1px solid var(--ink-soft);
+  border-radius: 2px;
+}
+
+.buttons { display: flex; gap: 8px; margin-top: 14px; }
+.buttons button {
+  flex: 1;
+  padding: 7px 4px;
+  font-family: "Cinzel", serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--parchment);
+  background: #4a3a22;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.buttons button:hover { background: #5d4a2c; }
+.buttons button:active { background: #3b2f1d; }
+#update-btn { background: #5a2a1c; }
+#update-btn:hover { background: #703525; }
+
+#legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ink-soft);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 4px;
+  font-size: 11px;
+  background: #faf2dd;
+  border: 1px solid var(--ink-soft);
+  border-radius: 10px;
+  cursor: default;
+  transition: opacity 0.3s;
+}
+.chip-off { opacity: 0.35; }
+.chip-token {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.hint {
+  margin: 12px 0 0;
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.credit {
+  margin: 8px 0 0;
+  font-size: 9px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.credit a { color: var(--ink-soft); }
+
+/* ---------- caption ---------- */
+#caption {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 22px;
+  font-family: "IM Fell English", serif;
+  font-size: 15px;
+  font-style: italic;
+  color: var(--parchment);
+  background: rgba(36, 28, 16, 0.82);
+  border: 1px solid var(--ink-soft);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  #panel { width: 200px; padding: 12px; }
+  #caption { font-size: 12px; white-space: normal; text-align: center; max-width: 90vw; }
+}
